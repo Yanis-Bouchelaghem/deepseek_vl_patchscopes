@@ -7,7 +7,7 @@ from deepseek_vl.models import VLChatProcessor, MultiModalityCausalLM
 from deepseek_vl.utils.io import load_pil_images
 
 from transformers import LlamaModel
-
+from PIL import Image
 # %%
 # Loading the model
 # specify the path to the model
@@ -17,66 +17,17 @@ tokenizer = vl_chat_processor.tokenizer
 
 deepseek_vl: MultiModalityCausalLM = AutoModelForCausalLM.from_pretrained(model_path, trust_remote_code=True)
 deepseek_vl = deepseek_vl.to(torch.bfloat16).cuda().eval()
-# %%
-# Run the model
-conversation = [
-    {
-        "role": "User",
-        "content": "<image_placeholder>Extract all information from this image and convert them to markdown format.",
-        "images": ["./images/training_pipelines.jpg"]
-    },
-    {
-        "role": "Assistant",
-        "content": ""
-    }
-]
-
-# load images and prepare for inputs
-pil_images = load_pil_images(conversation)
-prepare_inputs = vl_chat_processor(
-    #conversations=conversation,
-    prompt="The most well-known luxury fashion company is:",
-    images=pil_images,
-    force_batchify=True
-).to(deepseek_vl.device)
-
-# run image encoder to get the image embeddings
-inputs_embeds = deepseek_vl.prepare_inputs_embeds(**prepare_inputs)
-
-# run the model to get the response
-outputs = deepseek_vl.language_model.generate(
-
-    inputs_embeds=inputs_embeds,
-    attention_mask=prepare_inputs.attention_mask,
-    pad_token_id=tokenizer.eos_token_id,
-    bos_token_id=tokenizer.bos_token_id,
-    eos_token_id=tokenizer.eos_token_id,
-    max_new_tokens=10,
-    do_sample=False,
-    use_cache=True
-)
-
-answer = tokenizer.decode(outputs[0].cpu().tolist(), skip_special_tokens=True)
-print(f"{prepare_inputs['sft_format'][0]}", answer)
 
 # %%
-# Display model architecture
-deepseek_vl.language_model.model
+#with torch.no_grad():
+#    outputs = deepseek_vl.language_model(
+#        inputs_embeds=inputs_embeds,
+#        attention_mask=prepare_inputs.attention_mask,
+#        output_hidden_states=False,
+#        return_dict=True
+#    )
 # %%
 # CACHING ACTVIATIONS
-from collections import defaultdict
-
-activation_cache = defaultdict(list)
-
-def create_hook(name):
-    """"A hook creator function that will create a hook for a given layer name"""
-    def hook(module, input, output):
-        # If output is a tuple, you might want output[0].
-        # But typically for a decoder layer, output is the hidden states tensor.
-        # (If you're not sure, you can `print(type(output))` inside the hook.)
-        print(type(output[0]))
-        activation_cache[name].append(output[0])
-    return hook
 
 import torch
 from typing import Callable, Dict
@@ -84,7 +35,7 @@ from typing import Callable, Dict
 def run_with_hooks(
     hooks_dict: Dict[str, Callable],
     language_model: LlamaModel,
-    input_embeds,
+    inputs_embeds,
     attention_mask
 ):
     """
@@ -125,7 +76,6 @@ def run_with_hooks(
                 output_hidden_states=False,
                 return_dict=True
             )
-
     finally:
         # 3. Remove hooks no matter what (even if an error happens)
         for h in handles:
@@ -133,36 +83,45 @@ def run_with_hooks(
 
     return outputs
 
+def run_with_cache(language_model: LlamaModel, inputs_embeds, attention_mask) -> tuple:
+    """Runs an inference and returns a tuple (output, cache). The cache contains the activations for every layer."""
+    # Define the cache
+    activation_cache = dict()
+    hooks = dict()
+    # Define the hook function
+    def create_hook(layer_name):
+        """"A hook creator function that will create a hook for a given layer name"""
+        def hook(module, input, output):
+            #print(type(output[0]))
+            activation_cache[layer_name] = output[0]
+        return hook
+    for layer_index in range(len(language_model.layers)):
+        hooks[f"layers.{layer_index}"] = create_hook(f"layers.{layer_index}")
+    # Run the inference
+    output = run_with_hooks(hooks, language_model, inputs_embeds, attention_mask)
+    return output, activation_cache
+
+
+# %%
+
+pil_images = []
+pil_img = Image.open("./images/training_pipelines.jpg")
+pil_img = pil_img.convert("RGB")
+pil_images.append(pil_img)
+prepare_inputs = vl_chat_processor(
+    #conversations=conversation,
+    prompt="The most well-known luxury fashion company is:",
+    images=pil_images,
+    force_batchify=True
+).to(deepseek_vl.device)
+
+# run image encoder to get the image embeddings
+inputs_embeds = deepseek_vl.prepare_inputs_embeds(**prepare_inputs)
+
+output, cache = run_with_cache(deepseek_vl.language_model.model, inputs_embeds, prepare_inputs.attention_mask)
 
 
 
 # %%
-output = run_with_hooks({"layers.0": create_hook(f"layer_0")}, deepseek_vl.language_model.model,
-               input_embeds=inputs_embeds,
-               attention_mask=prepare_inputs.attention_mask)
-
+cache
 # %%
-HOOK_LAYER = 0
-hook_handle = deepseek_vl.language_model.model.layers[HOOK_LAYER].register_forward_hook(create_hook(f"layer_{HOOK_LAYER}"))
-
-# %%
-with torch.no_grad():
-    outputs = deepseek_vl.language_model(
-        inputs_embeds=inputs_embeds,
-        attention_mask=prepare_inputs.attention_mask,
-        output_hidden_states=False,
-        return_dict=True
-    )
-#%%
-outputs
-
-# %%
-deepseek_vl.language_model.model.layers[0]._forward_hooks
-
-# %%
-
-hook_handle.remove()
-
-
-# %%
-activation_cache["layer_0"]
