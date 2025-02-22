@@ -1,0 +1,49 @@
+# PyTorch with CUDA support
+--extra-index-url https://download.pytorch.org/whl/cu118
+torch
+torchvision
+torchaudio
+
+# ML & DL
+huggingface_hub
+torchtext
+torchinfo
+diffusers
+wandb # ==0.13.10
+accelerate
+ftfy
+safetensors
+openai>=1.56.2
+sentence-transformers
+
+# Data manipulation and analysis
+einops
+eindex-callum
+pandas
+numpy-stl
+scikit-learn
+hdbscan
+umap-learn
+
+# Utilities
+tqdm
+ipykernel
+notebook
+ipywidgets==7.7.1
+jupyterlab-widgets==1.1.1
+jupyter
+pre-commit
+gdown
+portalocker>=2.0.0
+typeguard
+jaxtyping
+tiktoken
+frozendict
+tabulate
+opencv-python
+
+# Deepseek VL requirements
+transformers>=4.38.2
+timm>=0.9.16
+sentencepiece
+attrdict
