@@ -170,12 +170,16 @@ activation = cache["layers.0"][0,6, :]
 activation.shape
 # %%
 SOURCE_LAYER = 0
-TARGET_LAYER = 23
+TARGET_LAYER = 0
 # Retrieve the activation of the source token.
+pil_images = []
+pil_img = Image.open("./images/x_begining.png")
+pil_img = pil_img.convert("RGB")
+pil_images.append(pil_img)
 prepare_inputs = vl_chat_processor(
     #conversations=conversation,
-    prompt="Diana, Princess of Wales",
-    images=[],
+    prompt="<image_placeholder>",
+    images=pil_images,
     force_batchify=True
 ).to(deepseek_vl.device)
 tokenized_input = prepare_inputs["input_ids"]
@@ -185,15 +189,18 @@ print(f"Input embeddings shape: {inputs_embeds.shape}")
 # Run a sequence generation with an activation patching hook.
     # Get the cache of the source prompt
 logits, cache = run_with_cache(deepseek_vl.language_model.model, inputs_embeds, prepare_inputs.attention_mask)
-source_activation = cache[f"layers.{SOURCE_LAYER}"][0, 6, :] # Get the embedding of Wales
+source_activation = cache[f"layers.{SOURCE_LAYER}"][0, 1, :] # Get the embedding of the first patch
 print(f"Shape of source activation : {source_activation.shape}")
 # %%
 # Do a normal generation
+pil_images = []
+pil_img = Image.open("./images/x_begining.png")
+pil_img = pil_img.convert("RGB")
+pil_images.append(pil_img)
 prepare_inputs = vl_chat_processor(
     #conversations=conversation,
-    prompt="""Syria: Country in the Middle East,
-Leonardo DiCaprio: American actor,
-Samsung: South Korean multinational major appliance and consumer electronics corporation,
+    prompt="""Circle: a round shape,
+Triangle: a shape with 3 points,
 x""",
     images=[],
     force_batchify=True
@@ -242,4 +249,31 @@ print(f"{prepare_inputs['sft_format'][0]}", answer)
 
 #Remove the activation patching hook
 hook_handle.remove()
+# %%
+pil_images = []
+pil_img = Image.open("./images/x_begining.png")
+pil_img = pil_img.convert("RGB")
+pil_images.append(pil_img)
+prepare_inputs = vl_chat_processor(
+    #conversations=conversation,
+    prompt="<image_placeholder>Question:What shape does this image contain ?\n Answer:",
+    images=pil_images,
+    force_batchify=True
+).to(deepseek_vl.device)
+tokenized_input = prepare_inputs["input_ids"]
+# run visual model to get the image embeddings
+inputs_embeds = deepseek_vl.prepare_inputs_embeds(**prepare_inputs)
+inputs_embeds.shape
+outputs = deepseek_vl.language_model.generate(
+    inputs_embeds=inputs_embeds,
+    attention_mask=prepare_inputs.attention_mask,
+    pad_token_id=tokenizer.eos_token_id,
+    bos_token_id=tokenizer.bos_token_id,
+    eos_token_id=tokenizer.eos_token_id,
+    max_new_tokens=20,
+    do_sample=False,
+    use_cache=False
+)
+answer = tokenizer.decode(outputs[0].cpu().tolist(), skip_special_tokens=True)
+print(f"{prepare_inputs['sft_format'][0]}", answer)
 # %%
