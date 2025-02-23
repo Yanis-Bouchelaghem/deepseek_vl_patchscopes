@@ -169,31 +169,12 @@ def debug_hook(module, inp, out):
 activation = cache["layers.0"][0,6, :]
 activation.shape
 # %%
-
-#Compare the logits of a clean run with the logits of a patched run
-    # Clean run
-with torch.no_grad():
-    clean_logits = deepseek_vl.language_model.model(
-        inputs_embeds=inputs_embeds,
-        attention_mask=prepare_inputs.attention_mask,
-        output_hidden_states=False,
-        return_dict=True,
-        use_cache=False
-    )
-    
-print(clean_logits)
-    # Patched run
-patched_logits = run_with_hooks({"layers.1" :create_activation_patching_hook(activation, 1)}, deepseek_vl.language_model.model,
-               inputs_embeds=inputs_embeds, attention_mask=prepare_inputs.attention_mask)
-
-print(patched_logits)
-# %%
-SOURCE_LAYER = 3
-TARGET_LAYER = 0
+SOURCE_LAYER = 0
+TARGET_LAYER = 23
 # Retrieve the activation of the source token.
 prepare_inputs = vl_chat_processor(
     #conversations=conversation,
-    prompt="Paris",
+    prompt="Diana, Princess of Wales",
     images=[],
     force_batchify=True
 ).to(deepseek_vl.device)
@@ -204,16 +185,16 @@ print(f"Input embeddings shape: {inputs_embeds.shape}")
 # Run a sequence generation with an activation patching hook.
     # Get the cache of the source prompt
 logits, cache = run_with_cache(deepseek_vl.language_model.model, inputs_embeds, prepare_inputs.attention_mask)
-source_activation = cache[f"layers.{SOURCE_LAYER}"][0, 1, :] # Get the embedding of Paris
+source_activation = cache[f"layers.{SOURCE_LAYER}"][0, 6, :] # Get the embedding of Wales
 print(f"Shape of source activation : {source_activation.shape}")
 # %%
 # Do a normal generation
 prepare_inputs = vl_chat_processor(
     #conversations=conversation,
-    prompt="""Algiers: The capital city of Algeria as well as the capital of the Algiers Province.
-    London: The capital and largest city of both England and the United Kingdom.
-    Tokyo: Officially the Tokyo Metropolis, is the capital city of Japan.
-    x""",
+    prompt="""Syria: Country in the Middle East,
+Leonardo DiCaprio: American actor,
+Samsung: South Korean multinational major appliance and consumer electronics corporation,
+x""",
     images=[],
     force_batchify=True
 ).to(deepseek_vl.device)
@@ -242,7 +223,7 @@ print(f"{prepare_inputs['sft_format'][0]}", answer)
 # Setup the activation patching hook
 hook_handle = deepseek_vl.language_model.model.layers[TARGET_LAYER].register_forward_hook(create_activation_patching_hook(
     activation_value=source_activation,
-    position=57
+    position=34
 ))
 print("Patched sequence generation:")
 outputs = deepseek_vl.language_model.generate(
