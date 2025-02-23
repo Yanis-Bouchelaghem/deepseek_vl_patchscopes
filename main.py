@@ -8,6 +8,7 @@ from deepseek_vl.utils.io import load_pil_images
 
 from transformers import LlamaModel
 from PIL import Image
+from jaxtyping import Float
 # %%
 # Loading the model
 # specify the path to the model
@@ -74,7 +75,7 @@ def run_with_hooks(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 output_hidden_states=False,
-                return_dict=True
+                return_dict=False
             )
     finally:
         # 3. Remove hooks no matter what (even if an error happens)
@@ -110,18 +111,81 @@ pil_img = pil_img.convert("RGB")
 pil_images.append(pil_img)
 prepare_inputs = vl_chat_processor(
     #conversations=conversation,
-    prompt="The most well-known luxury fashion company is:",
+    prompt="The capital of France is called",
     images=pil_images,
     force_batchify=True
 ).to(deepseek_vl.device)
-
-# run image encoder to get the image embeddings
+tokenized_input = prepare_inputs["input_ids"]
+# run visual model to get the image embeddings
 inputs_embeds = deepseek_vl.prepare_inputs_embeds(**prepare_inputs)
-
+inputs_embeds.shape
+# Run the language model
 output, cache = run_with_cache(deepseek_vl.language_model.model, inputs_embeds, prepare_inputs.attention_mask)
 
 
 
 # %%
-cache
+cache["layers.0"].shape
+        
+# %%
+def create_activation_patching_hook(
+    activation_value: Float[torch.Tensor, "d_model"], 
+    position: int,                   # which token index to patch
+    batch_idx: int = 0               # which batch example to patch
+):
+    """
+    A forward hook that replaces the activation at [batch_idx, position, :] 
+    with `activation_value`. 
+    """
+    def hook_fn(module, inputs, output):
+        # Clone the tensor
+        new_output = output[0]
+        new_output[batch_idx, position, :] = activation_value
+
+        # If the module returns a tuple, wrap the patched tensor back into a tuple
+        return output
+
+    return hook_fn
+
+def debug_hook(module, inp, out):
+    print(f"--- Hooking {module._get_name()} ---")
+    if isinstance(out, tuple):
+        print("Output is a tuple of length:", len(out))
+        for i, val in enumerate(out):
+            if hasattr(val, "shape"):
+                print(f"  out[{i}] shape: {val.shape}")
+            else:
+                print(f"  out[{i}]:", type(val))
+    else:
+        print("Output is a single tensor of shape:", out.shape)
+    return out
+
+
+# %%
+
+activation = cache["layers.0"][0,6, :]
+activation.shape
+# %%
+
+#Compare the logits of a clean run with the logits of a patched run
+    # Clean run
+with torch.no_grad():
+    clean_logits = deepseek_vl.language_model.model(
+        inputs_embeds=inputs_embeds,
+        attention_mask=prepare_inputs.attention_mask,
+        output_hidden_states=False,
+        return_dict=True,
+        use_cache=False
+    )
+    
+print(clean_logits)
+    # Patched run
+patched_logits = run_with_hooks({"layers.1" :create_activation_patching_hook(activation, 1)}, deepseek_vl.language_model.model,
+               inputs_embeds=inputs_embeds, attention_mask=prepare_inputs.attention_mask)
+
+print(patched_logits)
+# %%
+
+
+
 # %%
