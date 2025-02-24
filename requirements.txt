@@ -41,6 +41,8 @@ tiktoken
 frozendict
 tabulate
 opencv-python
+matplotlib==3.10.0
+seaborn==0.13.2
 
 # Deepseek VL requirements
 transformers>=4.38.2
