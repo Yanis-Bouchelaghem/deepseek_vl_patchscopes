@@ -134,7 +134,7 @@ def debug_hook(module, inp, out):
 # %%
 # Prepare and run the source prompt (do only once)
 pil_images = []
-pil_img = Image.open("./crafted_images/twitter_crafted.png")
+pil_img = Image.open("./crafted_images/blue_crafted.png")
 pil_img = pil_img.convert("RGB")
 pil_images.append(pil_img)
 prepare_source_inputs = vl_chat_processor(
@@ -151,9 +151,9 @@ logits, cache = run_with_cache(deepseek_vl.language_model.model, source_inputs_e
 
 # Prepare the target prompt (Not run it)
 prepare_target_inputs = vl_chat_processor(
-    prompt="""A monochrome, bitten apple silhouette: Apple,
-Silver, roaring, standing lion: Peugeot,
-Four colored squares forming a window: Microsoft,
+    prompt="""Warm, metallic yellow with a rich luster: Gold,
+Deep, rich blend of blue and red with a regal, mystical tone: Purple,
+Soft, warm pink with subtle red undertones, evoking elegance and romance: Rose,
 x:""",
     images=[],
     force_batchify=True
@@ -181,7 +181,7 @@ for source_layer in range(LAYER_COUNT):
         # Setup the activation patching hook
         hook_handle = deepseek_vl.language_model.model.layers[target_layer].register_forward_hook(create_activation_patching_hook(
             activation_value=source_activation,
-            position=34
+            position=50
         ))
         outputs = deepseek_vl.language_model.generate(
             inputs_embeds=target_inputs_embeds,
@@ -196,7 +196,7 @@ for source_layer in range(LAYER_COUNT):
 
         answer = tokenizer.decode(outputs[0].cpu().tolist(), skip_special_tokens=True)
         print(f"-----------Source layer : {source_layer}; Target layer: {target_layer}; Model output:{answer}")
-        if "twitter" in answer or "Twitter" in answer:
+        if "blue" in answer or "Blue" in answer:
             matrix[source_layer, target_layer] = 1
         else:
             matrix[source_layer, target_layer] = 0
@@ -231,9 +231,9 @@ plt.ylabel("Source layer index")
 plt.title("Cross shape patchscope results")
 
 # 3. Create a custom legend in place of the colorbar
-red_patch   = mpatches.Patch(color="#d48b89", label="'google' absent in output")
+red_patch   = mpatches.Patch(color="#d48b89", label="'blue' absent in output")
 #blue_patch  = mpatches.Patch(color="#7bbcc7", label="Output contains 'x'")
-green_patch = mpatches.Patch(color="#6db35a", label="'google' present in output")
+green_patch = mpatches.Patch(color="#6db35a", label="'blue' present in output")
 
 plt.legend(
     #handles=[green_patch, blue_patch, red_patch],
@@ -246,7 +246,7 @@ plt.legend(
 plt.show()
 
 # Save both matrices to a single compressed file
-np.savez("./matrices/twitter_matrices_0.npz", matrix=matrix, string_matrix=string_matrix)
+np.savez("./matrices/red_color_matrices_1.npz", matrix=matrix, string_matrix=string_matrix)
 # %%
 # Load the matrices back
 loaded_data = np.load("./matrices/cross_image_matrices.npz", allow_pickle=True)

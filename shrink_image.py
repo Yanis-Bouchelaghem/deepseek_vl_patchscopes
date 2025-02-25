@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 # Load the image
-image = cv2.imread("./images/twitter.png", cv2.IMREAD_UNCHANGED)  # Preserve alpha if present
+image = cv2.imread("./images/pepsi.png", cv2.IMREAD_UNCHANGED)  # Preserve alpha if present
 h, w = image.shape[:2]
 
 # Compute new dimensions while maintaining aspect ratio
