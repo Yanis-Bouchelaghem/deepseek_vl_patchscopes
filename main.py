@@ -277,27 +277,3 @@ hook_handle.remove()
 #answer = tokenizer.decode(outputs[0].cpu().tolist(), skip_special_tokens=True)
 #print(f"{prepare_inputs['sft_format'][0]}", answer)
 # %%
-
-# Prepare and run the source prompt
-pil_images = []
-pil_img = Image.open("./images/x_begining.png")
-pil_img = pil_img.convert("RGB")
-pil_images.append(pil_img)
-prepare_inputs = vl_chat_processor(
-    #conversations=conversation,
-    prompt="<image_placeholder>",
-    images=pil_images,
-    force_batchify=True
-).to(deepseek_vl.device)
-tokenized_input = prepare_inputs["input_ids"]
-# run visual model to get the image embeddings
-inputs_embeds = deepseek_vl.prepare_inputs_embeds(**prepare_inputs)
-print(f"Input embeddings shape: {inputs_embeds.shape}")
-# Run a sequence generation with an activation patching hook.
-    # Get the cache of the source prompt
-logits, cache = run_with_cache(deepseek_vl.language_model.model, inputs_embeds, prepare_inputs.attention_mask)
-
-
-# Extract the 
-source_activation = cache[f"layers.{SOURCE_LAYER}"][0, 1, :] # Get the embedding of the first patch (containing a cross)
-print(f"Shape of source activation : {source_activation.shape}")

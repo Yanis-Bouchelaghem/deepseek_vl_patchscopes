@@ -134,7 +134,7 @@ def debug_hook(module, inp, out):
 # %%
 # Prepare and run the source prompt (do only once)
 pil_images = []
-pil_img = Image.open("./images/x_begining.png")
+pil_img = Image.open("./crafted_images/twitter_crafted.png")
 pil_img = pil_img.convert("RGB")
 pil_images.append(pil_img)
 prepare_source_inputs = vl_chat_processor(
@@ -151,21 +151,26 @@ logits, cache = run_with_cache(deepseek_vl.language_model.model, source_inputs_e
 
 # Prepare the target prompt (Not run it)
 prepare_target_inputs = vl_chat_processor(
-    prompt="""Circle: a round shape,
-Triangle: a shape with 3 points,
-1""",
+    prompt="""A monochrome, bitten apple silhouette: Apple,
+Silver, roaring, standing lion: Peugeot,
+Four colored squares forming a window: Microsoft,
+x:""",
     images=[],
     force_batchify=True
 ).to(deepseek_vl.device)
 # run visual model to get the image embeddings
 target_inputs_embeds = deepseek_vl.prepare_inputs_embeds(**prepare_target_inputs)
+print(f"Target input embeddings shape: {target_inputs_embeds.shape}")
 # %%
 def contains_standalone_x(text):
     # Regular expression to match 'x' or 'X' as a standalone word
     pattern = r'\b[xX]\b'
     return bool(re.search(pattern, text))
 
+# Define the int matrix to save the possible states
 matrix = np.zeros((24,24), dtype=int)
+# Define the string matrix to save the model output
+string_matrix = np.full((24, 24), "", dtype=object)
 
 LAYER_COUNT = len(deepseek_vl.language_model.model.layers)
 for source_layer in range(LAYER_COUNT):
@@ -176,7 +181,7 @@ for source_layer in range(LAYER_COUNT):
         # Setup the activation patching hook
         hook_handle = deepseek_vl.language_model.model.layers[target_layer].register_forward_hook(create_activation_patching_hook(
             activation_value=source_activation,
-            position=18
+            position=34
         ))
         outputs = deepseek_vl.language_model.generate(
             inputs_embeds=target_inputs_embeds,
@@ -184,19 +189,18 @@ for source_layer in range(LAYER_COUNT):
             pad_token_id=tokenizer.eos_token_id,
             bos_token_id=tokenizer.bos_token_id,
             eos_token_id=tokenizer.eos_token_id,
-            max_new_tokens=20,
+            max_new_tokens=4,
             do_sample=False,
             use_cache=False
         )
 
         answer = tokenizer.decode(outputs[0].cpu().tolist(), skip_special_tokens=True)
         print(f"-----------Source layer : {source_layer}; Target layer: {target_layer}; Model output:{answer}")
-        if "cross" in answer or "Cross" in answer:
-            matrix[source_layer, target_layer] = 2
-        elif contains_standalone_x(answer):
+        if "twitter" in answer or "Twitter" in answer:
             matrix[source_layer, target_layer] = 1
         else:
             matrix[source_layer, target_layer] = 0
+        string_matrix[source_layer, target_layer] = answer
 
         #Remove the activation patching hook
         hook_handle.remove()
@@ -204,7 +208,7 @@ for source_layer in range(LAYER_COUNT):
 
 # 2. Define a discrete colormap for values 0, 1, and 2.
 #    You can pick any color palette you like.
-custom_cmap = sns.color_palette(["#ffa7a5", "#9BF6FF", "#caffbf"])
+custom_cmap = sns.color_palette(["#d48b89", "#7bbcc7", "#6db35a"])
 
 # 2. Create the heatmap
 ax = sns.heatmap(
@@ -224,69 +228,33 @@ plt.xticks(rotation=60, ha='center')
 # Axis labels and title
 plt.xlabel("Target layer index")
 plt.ylabel("Source layer index")
-plt.title("24x24 Matrix Heatmap")
+plt.title("Cross shape patchscope results")
 
 # 3. Create a custom legend in place of the colorbar
-red_patch   = mpatches.Patch(color="#ffa7a5", label="Output = neither")
-blue_patch  = mpatches.Patch(color="#9BF6FF", label="Output contains 'x'")
-green_patch = mpatches.Patch(color="#caffbf", label="Output contains 'cross'")
+red_patch   = mpatches.Patch(color="#d48b89", label="'google' absent in output")
+#blue_patch  = mpatches.Patch(color="#7bbcc7", label="Output contains 'x'")
+green_patch = mpatches.Patch(color="#6db35a", label="'google' present in output")
 
 plt.legend(
-    handles=[green_patch, blue_patch, red_patch],
+    #handles=[green_patch, blue_patch, red_patch],
+    handles=[green_patch, red_patch],
     bbox_to_anchor=(1.05, 1),
     loc=2,
     borderaxespad=0.
 )
 
 plt.show()
+
+# Save both matrices to a single compressed file
+np.savez("./matrices/twitter_matrices_0.npz", matrix=matrix, string_matrix=string_matrix)
 # %%
-# Define how each value maps to a color
-#val_to_color = {
-#    0: "#ffa7a5",  # red   -> Output = neither
-#    1: "#9BF6FF",  # blue  -> Output = 'x'
-#    2: "#caffbf",  # green -> Output = 'cross'
-#}
-#
-#fig, ax = plt.subplots(figsize=(6, 6))
-#
-## Draw each cell as a 1×1 FancyBboxPatch with rounded corners
-#for row in range(matrix.shape[0]):
-#    for col in range(matrix.shape[1]):
-#        val = matrix[row, col]
-#        color = val_to_color[val]
-#        patch = mpatches.FancyBboxPatch(
-#            (col + 0.25, row + 0.25), 0.5, 0.5, 
-#            boxstyle=mpatches.BoxStyle("Round", pad=0.2), 
-#            facecolor=color, 
-#            edgecolor="white", 
-#            linewidth=0.5
-#        )
-#        ax.add_patch(patch)
-#
-## Flip the y-axis so row=0 is at the top
-#ax.set_ylim(matrix.shape[0], 0)
-#ax.set_xlim(0, matrix.shape[1])
-#ax.set_aspect("equal")
-#
-## Label ticks (shift by 0.5 to center tick labels)
-#ax.set_xticks(np.arange(24) + 0.5)
-#ax.set_yticks(np.arange(24) + 0.5)
-#ax.set_xticklabels(range(24), rotation=45, ha="right")
-#ax.set_yticklabels(range(24))
-#
-#plt.xlabel("Target layer index")
-#plt.ylabel("Source layer index")
-#plt.title("24x24 Matrix Heatmap with Rounded Cells")
-#
-## Create a custom legend
-#red_patch   = mpatches.Patch(color="#ffa7a5", label="Output = neither")
-#blue_patch  = mpatches.Patch(color="#9BF6FF", label="Output = 'x'")
-#green_patch = mpatches.Patch(color="#caffbf", label="Output = 'cross'")
-#plt.legend(
-#    handles=[green_patch, blue_patch, red_patch],
-#    bbox_to_anchor=(1.05, 1),
-#    loc="upper left"
-#)
-#
-#plt.show()
+# Load the matrices back
+loaded_data = np.load("./matrices/cross_image_matrices.npz", allow_pickle=True)
+loaded_matrix = loaded_data["matrix"]
+loaded_string_matrix = loaded_data["string_matrix"]
+
+# Print to verify loading
+print("Loaded Integer Matrix:\n", loaded_matrix)
+print("\nLoaded String Matrix:\n", loaded_string_matrix)
+
 # %%
