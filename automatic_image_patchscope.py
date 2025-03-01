@@ -134,7 +134,7 @@ def debug_hook(module, inp, out):
 # %%
 # Prepare and run the source prompt (do only once)
 pil_images = []
-pil_img = Image.open("./crafted_images/pure_black_crafted.png")
+pil_img = Image.open("./crafted_images/mercedes_except_one_position/facebook_494_crafted.png")
 pil_img = pil_img.convert("RGB")
 pil_images.append(pil_img)
 prepare_source_inputs = vl_chat_processor(
@@ -151,10 +151,8 @@ logits, cache = run_with_cache(deepseek_vl.language_model.model, source_inputs_e
 
 # Prepare the target prompt (Not run it)
 prepare_target_inputs = vl_chat_processor(
-    prompt="""Warm, metallic yellow with a rich luster: Gold,
-Deep, rich blend of blue and red with a regal, mystical tone: Purple,
-Soft, warm pink with subtle red undertones, evoking elegance and romance: Rose,
-x:""",
+    prompt="""What is around this ?
+x: around it is""",
     images=[],
     force_batchify=True
 ).to(deepseek_vl.device)
@@ -175,13 +173,13 @@ string_matrix = np.full((24, 24), "", dtype=object)
 LAYER_COUNT = len(deepseek_vl.language_model.model.layers)
 for source_layer in range(LAYER_COUNT):
     # Extract the source activation
-    source_activation = cache[f"layers.{source_layer}"][0, 1, :] # Get the embedding of the first patch (containing a cross)
+    source_activation = cache[f"layers.{source_layer}"][0, 495, :] # Get the embedding of the first patch (containing a cross)
     print(f"Shape of source activation at layer {source_layer}: {source_activation.shape}")
     for target_layer in range(LAYER_COUNT):
         # Setup the activation patching hook
         hook_handle = deepseek_vl.language_model.model.layers[target_layer].register_forward_hook(create_activation_patching_hook(
             activation_value=source_activation,
-            position=51
+            position=10
         ))
         outputs = deepseek_vl.language_model.generate(
             inputs_embeds=target_inputs_embeds,
@@ -189,14 +187,14 @@ for source_layer in range(LAYER_COUNT):
             pad_token_id=tokenizer.eos_token_id,
             bos_token_id=tokenizer.bos_token_id,
             eos_token_id=tokenizer.eos_token_id,
-            max_new_tokens=4,
+            max_new_tokens=8,
             do_sample=False,
             use_cache=False
         )
 
         answer = tokenizer.decode(outputs[0].cpu().tolist(), skip_special_tokens=True)
         print(f"-----------Source layer : {source_layer}; Target layer: {target_layer}; Model output:{answer}")
-        if "black" in answer or "Black" in answer:
+        if "circle" in answer or "Circle" in answer:
             matrix[source_layer, target_layer] = 1
         else:
             matrix[source_layer, target_layer] = 0
@@ -231,9 +229,9 @@ plt.ylabel("Source layer index")
 plt.title("Cross shape patchscope results")
 
 # 3. Create a custom legend in place of the colorbar
-red_patch   = mpatches.Patch(color="#d48b89", label="'Black' absent in output")
+red_patch   = mpatches.Patch(color="#d48b89", label="'circle' absent in output")
 #blue_patch  = mpatches.Patch(color="#7bbcc7", label="Output contains 'x'")
-green_patch = mpatches.Patch(color="#6db35a", label="'black' present in output")
+green_patch = mpatches.Patch(color="#6db35a", label="'circle' present in output")
 
 plt.legend(
     #handles=[green_patch, blue_patch, red_patch],
@@ -257,4 +255,5 @@ loaded_string_matrix = loaded_data["string_matrix"]
 print("Loaded Integer Matrix:\n", loaded_matrix)
 print("\nLoaded String Matrix:\n", loaded_string_matrix)
 
+# %%
 # %%
